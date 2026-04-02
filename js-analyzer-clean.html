@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JS Security Analyzer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap');
+
+:root {
+  --bg: #0a0c0f;
+  --bg2: #111418;
+  --bg3: #181c22;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --muted: #6b7280;
+  --accent: #00d4aa;
+  --accent2: #0ea5e9;
+  --crit: #ef4444;
+  --high: #f97316;
+  --med: #3b82f6;
+  --info: #22c55e;
+  --crit-bg: rgba(239,68,68,0.1);
+  --high-bg: rgba(249,115,22,0.1);
+  --med-bg: rgba(59,130,246,0.1);
+  --info-bg: rgba(34,197,94,0.1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at 20% 20%, rgba(0,212,170,0.04) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 80%, rgba(14,165,233,0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; position: relative; z-index: 1; }
+
+header { margin-bottom: 2.5rem; display: flex; align-items: center; gap: 1rem; }
+.logo { width: 40px; height: 40px; border: 1px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.logo svg { width: 20px; height: 20px; stroke: var(--accent); fill: none; stroke-width: 2; }
+.header-text h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.header-text p { font-size: 0.75rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.card-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.input-group { position: relative; margin-bottom: 0.75rem; }
+.input-group input {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input-group input:focus { border-color: var(--accent); }
+.input-group input::placeholder { color: var(--muted); }
+
+.btn-row { display: flex; gap: 0.75rem; }
+
+.btn {
+  flex: 1;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'Syne', sans-serif;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+  letter-spacing: 0.02em;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--accent); color: #0a0c0f; }
+.btn-primary:hover { background: #00e6b8; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border2); flex: 0; padding: 0.75rem 1rem; }
+.btn-ghost:hover { border-color: var(--border); background: var(--bg3); }
+
+.scan-card { display: none; }
+.progress-wrap { margin-bottom: 0.75rem; }
+.progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.progress-status { font-size: 0.8rem; color: var(--text); }
+.progress-pct { font-size: 0.75rem; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+.progress-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 1px; width: 0%; transition: width 0.3s ease; }
+
+.log-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+.log-box::-webkit-scrollbar { width: 4px; }
+.log-box::-webkit-scrollbar-track { background: transparent; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.log-line { padding: 1px 0; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,0.03); }
+.log-line.ok { color: var(--info); }
+.log-line.warn { color: var(--high); }
+.log-line.err { color: var(--crit); }
+
+.results-phase { display: none; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+.stat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+}
+.stat-num { font-size: 1.75rem; font-weight: 800; }
+.stat-num.crit { color: var(--crit); }
+.stat-num.high { color: var(--high); }
+.stat-num.med { color: var(--med); }
+.stat-num.ep { color: var(--accent); }
+.stat-label { font-size: 0.65rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 1rem; flex-wrap: wrap; }
+.tab {
+  font-size: 0.7rem;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+.tab:hover { color: var(--text); border-color: var(--border2); }
+.tab.active { background: var(--accent); color: #0a0c0f; border-color: var(--accent); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.finding {
+  border-left: 2px solid var(--border);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.625rem;
+  border-radius: 0 8px 8px 0;
+  background: var(--bg3);
+  transition: border-color 0.15s;
+}
+.finding.crit { border-left-color: var(--crit); background: var(--crit-bg); }
+.finding.high { border-left-color: var(--high); background: var(--high-bg); }
+.finding.med { border-left-color: var(--med); background: var(--med-bg); }
+.finding.info { border-left-color: var(--info); background: var(--info-bg); }
+
+.finding-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.badge { display: inline-block; font-size: 0.6rem; font-weight: 700; padding: 2px 7px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; text-transform: uppercase; }
+.badge.crit { background: rgba(239,68,68,0.2); color: #fca5a5; }
+.badge.high { background: rgba(249,115,22,0.2); color: #fdba74; }
+.badge.med { background: rgba(59,130,246,0.2); color: #93c5fd; }
+.badge.info { background: rgba(34,197,94,0.2); color: #86efac; }
+.badge.cat { background: rgba(255,255,255,0.06); color: var(--muted); }
+
+.finding-title { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.finding-match { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--muted); margin-top: 4px; word-break: break-all; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; }
+.finding-desc { font-size: 0.72rem; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.finding-src { font-size: 0.6rem; color: var(--muted); margin-top: 4px; font-family: 'JetBrains Mono', monospace; opacity: 0.7; }
+
+.endpoint-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg3);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.method {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  min-width: 36px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.GET { background: rgba(34,197,94,0.15); color: #86efac; }
+.POST { background: rgba(59,130,246,0.15); color: #93c5fd; }
+.PUT { background: rgba(249,115,22,0.15); color: #fdba74; }
+.DELETE { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.XHR { background: rgba(168,85,247,0.15); color: #d8b4fe; }
+.WS { background: rgba(234,179,8,0.15); color: #fde047; }
+.GQL { background: rgba(236,72,153,0.15); color: #f9a8d4; }
+
+.subdomain-prompt {
+  display: none;
+  background: var(--bg2);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+.subdomain-prompt h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--accent); }
+.subdomain-prompt p { font-size: 0.78rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.6; }
+
+.sub-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+.sub-chip {
+  font-size: 0.65rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  padding: 3px 10px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.subdomain-results { display: none; }
+.sub-result-header {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sub-result-block { margin-bottom: 1.25rem; }
+
+.empty-state { font-size: 0.78rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; padding: 1rem 0; }
+
+.export-bar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 0.75rem; }
+.export-btn {
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.export-btn:hover { color: var(--text); border-color: var(--accent); }
+
+@media (max-width: 600px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-num { font-size: 1.3rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>JS Security Analyzer</h1>
+      <p>// web pentest · javascript · api · secrets · subdomains</p>
+    </div>
+  </header>
+
+  <!-- Input Phase -->
+  <div class="card" id="input-phase">
+    <div class="card-title">Target</div>
+    <div class="input-group">
+      <input id="target-url" type="text" placeholder="https://example.com  or  https://example.com/static/js/main.chunk.js" />
+    </div>
+    <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.875rem;line-height:1.6;font-family:'JetBrains Mono',monospace;">
+      Paste a site URL or direct JS bundle URL. For best results, grab the bundle URL from DevTools → Network → JS.<br>
+      Use only on targets you are authorized to test.
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="start-btn" onclick="startScan()">Run Analysis</button>
+      <button class="btn btn-ghost" onclick="loadDemo()">Demo</button>
+    </div>
+  </div>
+
+  <!-- Scan Phase -->
+  <div class="card scan-card" id="scan-phase">
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span class="progress-status" id="scan-status">Initializing...</span>
+        <span class="progress-pct" id="scan-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-bar"></div></div>
+    </div>
+    <div class="log-box" id="scan-log"></div>
+  </div>
+
+  <!-- Results Phase -->
+  <div class="results-phase" id="results-phase">
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-num crit" id="st-crit">0</div><div class="stat-label">Critical</div></div>
+      <div class="stat"><div class="stat-num high" id="st-high">0</div><div class="stat-label">High</div></div>
+      <div class="stat"><div class="stat-num med" id="st-med">0</div><div class="stat-label">Medium</div></div>
+      <div class="stat"><div class="stat-num ep" id="st-ep">0</div><div class="stat-label">Endpoints</div></div>
+    </div>
+
+    <div class="export-bar">
+      <button class="export-btn" onclick="exportJSON()">Export JSON</button>
+      <button class="export-btn" onclick="exportText()">Export TXT</button>
+      <button class="export-btn" onclick="resetAll()">New Scan</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('findings',this)">All findings</button>
+      <button class="tab" onclick="switchTab('endpoints',this)">API endpoints</button>
+      <button class="tab" onclick="switchTab('secrets',this)">Secrets</button>
+      <button class="tab" onclick="switchTab('info',this)">Info leakage</button>
+      <button class="tab" onclick="switchTab('raw',this)">Raw matches</button>
+    </div>
+
+    <div id="tab-findings" class="tab-content active"></div>
+    <div id="tab-endpoints" class="tab-content"></div>
+    <div id="tab-secrets" class="tab-content"></div>
+    <div id="tab-info" class="tab-content"></div>
+    <div id="tab-raw" class="tab-content"></div>
+  </div>
+
+  <!-- Subdomain Prompt -->
+  <div class="subdomain-prompt" id="subdomain-prompt">
+    <h3>Scan subdomains?</h3>
+    <p>Main scan complete. Discovered potential subdomains below. Automatically fetch and analyze their JavaScript files for additional vulnerabilities.</p>
+    <div class="sub-grid" id="sub-grid"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="startSubdomainScan()">Scan subdomain JS</button>
+      <button class="btn btn-ghost" onclick="skipSubdomain()">Skip</button>
+    </div>
+  </div>
+
+  <!-- Subdomain Results -->
+  <div class="subdomain-results" id="subdomain-results">
+    <div class="card">
+      <div class="card-title">Subdomain JS findings</div>
+      <div id="subdomain-findings"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let scanResults = { findings:[], endpoints:[], secrets:[], info:[], raw:[] };
+let targetDomain = '';
+
+const PATTERNS = {
+  secrets: [
+    { name:'AWS Access Key ID', regex:/AKIA[0-9A-Z]{16}/g, sev:'crit', desc:'AWS access key ID — immediate credential compromise risk. Rotate immediately.' },
+    { name:'AWS Secret Access Key', regex:/aws_secret_access_key\s*[=:]\s*["']?([A-Za-z0-9\/+=]{40})["']?/gi, sev:'crit', desc:'AWS secret key exposed in source code.' },
+    { name:'Google API Key', regex:/AIza[0-9A-Za-z_\-]{35}/g, sev:'crit', desc:'Google API key — may enable billing abuse and data access.' },
+    { name:'Stripe Live Secret Key', regex:/sk_live_[0-9a-zA-Z]{24,}/g, sev:'crit', desc:'Stripe live secret key — full payment and customer data access.' },
+    { name:'Stripe Publishable Key', regex:/pk_live_[0-9a-zA-Z]{24,}/g, sev:'high', desc:'Stripe publishable (live) key found in JS.' },
+    { name:'GitHub Token', regex:/gh[pousr]_[A-Za-z0-9]{36,}/g, sev:'crit', desc:'GitHub personal access token — repo and org access.' },
+    { name:'JWT Token (hardcoded)', regex:/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/g, sev:'high', desc:'JWT token hardcoded in source. May allow session hijacking.' },
+    { name:'RSA/EC Private Key', regex:/-----BEGIN (RSA |EC )?PRIVATE KEY-----/g, sev:'crit', desc:'Private key material embedded in JavaScript source.' },
+    { name:'Firebase Config', regex:/firebaseConfig\s*=\s*\{[^}]+apiKey/gs, sev:'high', desc:'Firebase config with API key — may expose database rules.' },
+    { name:'Twilio API Key', regex:/SK[0-9a-fA-F]{32}/g, sev:'high', desc:'Twilio API key found.' },
+    { name:'SendGrid API Key', regex:/SG\.[a-zA-Z0-9_\-]{22}\.[a-zA-Z0-9_\-]{43}/g, sev:'high', desc:'SendGrid API key — email send access.' },
+    { name:'Hardcoded Password', regex:/password\s*[:=]\s*["'][^"']{6,}["']/gi, sev:'high', desc:'Hardcoded password string found in source.' },
+    { name:'Hardcoded Secret', regex:/secret\s*[:=]\s*["'][^"']{8,}["']/gi, sev:'high', desc:'Generic hardcoded secret value.' },
+    { name:'Bearer Token (hardcoded)', regex:/[Bb]earer\s+[a-zA-Z0-9\-_\.]{20,}/g, sev:'high', desc:'Hardcoded bearer token — API authentication bypass.' },
+    { name:'Basic Auth Credentials', regex:/Authorization['":\s]+Basic\s+[A-Za-z0-9+\/=]{8,}/gi, sev:'crit', desc:'Base64-encoded Basic Auth credentials hardcoded.' },
+    { name:'Slack Webhook', regex:/https:\/\/hooks\.slack\.com\/services\/[A-Z0-9\/]{40,}/g, sev:'high', desc:'Slack incoming webhook URL — can post to channels.' },
+    { name:'Mailchimp API Key', regex:/[0-9a-f]{32}-us[0-9]{1,2}/g, sev:'high', desc:'Mailchimp API key.' },
+    { name:'Algolia API Key', regex:/\b[A-Za-z0-9]{32}\b.*algolia|\balgolia.*[A-Za-z0-9]{32}\b/gi, sev:'high', desc:'Algolia API key found.' },
+    { name:'Heroku API Key', regex:/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, sev:'high', desc:'UUID-format key (potential Heroku or OAuth token).' },
+    { name:'NPM Token', regex:/npm_[A-Za-z0-9]{36}/g, sev:'high', desc:'NPM publish token — package registry access.' },
+  ],
+  endpoints: [
+    { name:'fetch()', regex:/fetch\s*\(\s*["'`]([^"'`\s]{5,})["'`]/g, method:'GET', sev:'info' },
+    { name:'axios.get', regex:/axios\.get\s*\(\s*["'`]([^"'`\s]{5,})["'`]/g, method:'GET', sev:'info' },
+    { name:'axios.post', regex:/axios\.post\s*\(\s*["'`]([^"'`\s]{5,})["'`]/g, method:'POST', sev:'info' },
+    { name:'axios.put', regex:/axios\.put\s*\(\s*["'`]([^"'`\s]{5,})["'`]/g, method:'PUT', sev:'info' },
+    { name:'axios.delete', regex:/axios\.delete\s*\(\s*["'`]([^"'`\s]{5,})["'`]/g, method:'DELETE', sev:'info' },
+    { name:'XHR', regex:/\.open\s*\(\s*["'](GET|POST|PUT|DELETE|PATCH)["']\s*,\s*["'`]([^"'`\s]{5,})["'`]/g, method:'XHR', sev:'info' },
+    { name:'API URL', regex:/["'`]((?:https?:\/\/[^"'`\s]{5,}|\/api\/[^"'`\s\)]{2,}|\/v[0-9]+\/[^"'`\s\)]{2,}))["'`]/g, method:'GET', sev:'info' },
+    { name:'GraphQL', regex:/["'`]([^"'`\s]*graphql[^"'`\s]*)["'`]/gi, method:'GQL', sev:'info' },
+    { name:'WebSocket', regex:/new\s+WebSocket\s*\(\s*["'`]([^"'`\s]+)["'`]/g, method:'WS', sev:'info' },
+  ],
+  vulns: [
+    { name:'eval() usage', regex:/\beval\s*\(/g, sev:'high', desc:'eval() executes arbitrary strings. Direct code injection / XSS risk.' },
+    { name:'innerHTML assignment', regex:/\.innerHTML\s*=/g, sev:'med', desc:'Direct innerHTML assignment — potential DOM XSS sink.' },
+    { name:'outerHTML assignment', regex:/\.outerHTML\s*=/g, sev:'med', desc:'outerHTML assignment — potential DOM XSS sink.' },
+    { name:'document.write()', regex:/document\.write\s*\(/g, sev:'high', desc:'document.write() can introduce script injection.' },
+    { name:'dangerouslySetInnerHTML (React)', regex:/dangerouslySetInnerHTML/g, sev:'high', desc:'React dangerous HTML prop — XSS vector if user-controlled.' },
+    { name:'postMessage without origin check', regex:/addEventListener\s*\(\s*["']message["'][^)]+\)/g, sev:'high', desc:'postMessage listener — verify event.origin is checked.' },
+    { name:'localStorage (sensitive data)', regex:/localStorage\.setItem\s*\([^)]*(?:token|password|secret|auth|key)/gi, sev:'high', desc:'Sensitive data written to localStorage — persists across sessions.' },
+    { name:'sessionStorage (sensitive data)', regex:/sessionStorage\.setItem\s*\([^)]*(?:token|password|secret|auth|key)/gi, sev:'med', desc:'Sensitive data written to sessionStorage.' },
+    { name:'Insecure HTTP URL', regex:/["'`]http:\/\/(?!localhost|127\.0\.0\.1)[^"'`\s]{5,}["'`]/g, sev:'med', desc:'Non-HTTPS URL in use — traffic may be intercepted (MITM).' },
+    { name:'CORS wildcard (*)', regex:/Access-Control-Allow-Origin['":\s]+\*/g, sev:'med', desc:'CORS wildcard allows requests from any origin.' },
+    { name:'Prototype pollution gadget', regex:/__proto__\s*[\[.]|constructor\s*\[["']prototype["']/g, sev:'crit', desc:'Prototype pollution gadget — can affect all objects.' },
+    { name:'jQuery .html() XSS sink', regex:/\$\s*\([^)]+\)\s*\.html\s*\(/g, sev:'high', desc:'jQuery .html() with potentially user-controlled content.' },
+    { name:'Open redirect', regex:/(?:redirect|returnUrl|next|url)\s*=\s*(?:window\.location|location\.href|params)/gi, sev:'med', desc:'Potential open redirect — may be exploitable for phishing.' },
+    { name:'Debug mode enabled', regex:/\bdebug\s*[:=]\s*true|\bDEBUG\s*[:=]\s*true/g, sev:'med', desc:'Debug flag set to true — may expose verbose error info.' },
+    { name:'Source map reference', regex:/\/\/# sourceMappingURL=/g, sev:'info', desc:'Source map linked — original unminified source may be recoverable.' },
+    { name:'Function() constructor', regex:/new\s+Function\s*\(/g, sev:'high', desc:'Function() constructor can execute dynamic code — similar to eval().' },
+    { name:'setTimeout/setInterval string', regex:/(?:setTimeout|setInterval)\s*\(\s*["']/g, sev:'med', desc:'String passed to setTimeout/setInterval — treated as eval().' },
+    { name:'window.location.hash injection', regex:/location\.hash/g, sev:'med', desc:'location.hash used — if unsanitized may lead to DOM XSS.' },
+    { name:'URL hash to DOM', regex:/location\.hash.*(?:innerHTML|document\.write|eval)/gs, sev:'crit', desc:'URL hash directly written to DOM — confirmed DOM XSS vector.' },
+  ],
+  info: [
+    { name:'Private/Internal IP address', regex:/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b/g, sev:'high', desc:'Internal network IP address leaked in source.' },
+    { name:'Email address', regex:/[a-zA-Z0-9._%+\-]{2,}@[a-zA-Z0-9.\-]{2,}\.[a-zA-Z]{2,}/g, sev:'info', desc:'Email address found — may be an internal/developer contact.' },
+    { name:'Version string', regex:/["']?version["']?\s*[:=]\s*["']([0-9]+\.[0-9]+(?:\.[0-9]+)?)["']/gi, sev:'info', desc:'Software version exposed — aids vulnerability research.' },
+    { name:'Stack trace / file path', regex:/at\s+\w[\w.]*\s+\([^)]*\.(?:js|ts):\d+:\d+\)/g, sev:'med', desc:'Stack trace with internal file paths leaked.' },
+    { name:'S3 Bucket URL', regex:/https?:\/\/[a-z0-9\-]+\.s3[.\-][^"'\s\)]+/gi, sev:'high', desc:'S3 bucket URL — may expose misconfigured public storage.' },
+    { name:'Azure Blob Storage URL', regex:/https?:\/\/[a-z0-9]+\.blob\.core\.windows\.net[^"'\s]*/gi, sev:'high', desc:'Azure Blob Storage URL found.' },
+    { name:'Database connection string', regex:/(?:mongodb|mysql|postgres|postgresql|redis|mssql):\/\/[^\s"'`\)]+/gi, sev:'crit', desc:'Database connection string with credentials in JS source.' },
+    { name:'Internal hostname', regex:/["'`]((?:[a-z0-9\-]+\.)+(?:internal|local|corp|intranet|dev|staging|prod))["'`]/gi, sev:'med', desc:'Internal hostname reference — internal network enumeration.' },
+    { name:'Security TODO/FIXME', regex:/\/\/\s*(?:TODO|FIXME|HACK|XXX)[^\n]*(?:auth|security|password|token|vuln|bypass|inject)/gi, sev:'med', desc:'Security-related developer comment — known unresolved issue.' },
+    { name:'console.log (sensitive)', regex:/console\.(?:log|warn|error|debug)\s*\([^)]*(?:password|token|secret|auth|key|credential)/gi, sev:'med', desc:'Sensitive data logged to browser console.' },
+    { name:'Cloudfront / CDN URL', regex:/https?:\/\/[a-z0-9\-]+\.cloudfront\.net[^"'\s]*/gi, sev:'info', desc:'CloudFront CDN URL — useful for asset enumeration.' },
+    { name:'Build artifact / commit hash', regex:/\b[0-9a-f]{40}\b/g, sev:'info', desc:'40-char hex string — possible Git commit hash in production build.' },
+    { name:'Base64 encoded data', regex:/["'](?:[A-Za-z0-9+\/]{60,}={0,2})["']/g, sev:'info', desc:'Long Base64 string — may contain encoded credentials or data.' },
+  ]
+};
+
+const DEMO_JS = `
+const config = {
+  apiKey: "AIza_FAKE_KEY8",
+  authDomain: "myapp.firebaseapp.com",
+  debug: true,
+  version: "2.4.1"
+};
+
+const API_BASE = "http://api.internal.myapp.com/v2";
+const WS_URL = "wss://realtime.myapp.com/socket";
+const S3_BUCKET = "https://myapp-assets.s3.us-east-1.amazonaws.com/uploads";
+const dbConn = "mongodb://FAKE_DB_CONNECTION";
+
+const STRIPE_KEY = "sk_live_FAKE_KEY";
+const AWS_KEY = "AKIA_FAKE_KEY";
+const JWT = "JWT_FAKE_TOKEN";
+const privateKey = "-----BEGIN PRIVATE KEY (FAKE)-----";
+const GITHUB = "ghp_FAKE_TOKEN";
+
+fetch(API_BASE + "/users/all", { headers: { Authorization: "Bearer " + JWT } })
+  .then(r => r.json()).then(data => {
+    document.getElementById("out").innerHTML = JSON.stringify(data);
+    localStorage.setItem("authToken", data.token);
+    console.log("User auth data:", data.password);
+  });
+
+axios.get("/api/v1/admin/users");
+axios.post("/api/v1/login", credentials);
+axios.delete("/api/v1/accounts/" + id);
+axios.put("/api/v2/profile/update");
+
+const q = new XMLHttpRequest();
+q.open("GET", "/api/v1/internal/config", true);
+
+eval(userInput);
+document.write(location.hash.slice(1));
+new Function("return " + untrustedCode)();
+setTimeout("alert(1)", 100);
+$('#output').html(serverResponse);
+dangerouslySetInnerHTML={{ __html: userComment }};
+
+window.addEventListener("message", function(event) {
+  document.getElementById("div").innerHTML = event.data;
+  eval(event.data.code);
+});
+
+// TODO: fix security vulnerability — auth check bypassed on admin endpoints
+// FIXME: password validation removed for testing
+// Internal: 192.168.1.45 (prod DB), 10.0.0.23 (auth service)
+// Contact: dev-team@internal.myapp.com, admin@corp.myapp.com
+
+//# sourceMappingURL=main.chunk.js.map
+`;
+
+const DEMO_SUBDOMAINS = ['api','admin','staging','dev','app','auth','dashboard','cdn','static','beta'];
+const DEMO_SUB_JS = [
+  `fetch("/api/admin/users/all"); const token="JWT_FAKE_TOKEN"; localStorage.setItem("adminKey", token);`,
+  `const config={password:"AdminPass123",debug:true}; axios.get("/api/v1/users"); console.log("secret:", apiKey);`,
+  `eval(location.hash.slice(1)); document.write(userInput); const key="AKIA_FAKE_KEY";`,
+  `const db="postgres://admin:pass123@10.0.0.5:5432/prod"; document.getElementById("x").innerHTML=data;`,
+  `//FIXME: auth bypass in admin panel\naxios.get("/api/v1/admin/all");\nconst s3="https://secret-bucket.s3.amazonaws.com/data";`,
+  `export const greet=name=>"Hello "+name; export default greet;`,
+  `const VERSION="3.1.2"; const BUILD="2025.01.15";\n//# sourceMappingURL=bundle.js.map`,
+  `const privateKey="-----BEGIN PRIVATE KEY (FAKE)-----"; const slack="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX";`,
+  `sessionStorage.setItem("authToken", response.data.token); $.ajax({url:"/api/secret",success:d=>$("#out").html(d)});`,
+  `const sk="sk_live_FAKE_KEY"; window.location.href=params.redirect;`,
+];
+
+function log(msg, type='') {
+  const div = document.getElementById('scan-log');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (type ? ' '+type : '');
+  const time = new Date().toLocaleTimeString('en-GB', {hour12:false});
+  line.textContent = `[${time}] ${msg}`;
+  div.appendChild(line);
+  div.scrollTop = div.scrollHeight;
+}
+
+function setProgress(pct, status) {
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('scan-pct').textContent = pct + '%';
+  if(status) document.getElementById('scan-status').textContent = status;
+}
+
+function analyzeJS(jsCode, source) {
+  const findings = [], endpointMap = new Map(), secrets = [], info = [], raw = [];
+
+  PATTERNS.secrets.forEach(p => {
+    const re = new RegExp(p.regex.source, p.regex.flags);
+    let m;
+    while((m = re.exec(jsCode)) !== null) {
+      const val = m[0].slice(0,100);
+      const f = { name:p.name, value:val, sev:p.sev, desc:p.desc, category:'Secret', source };
+      secrets.push(f); findings.push(f); raw.push({ pattern:p.name, match:val, source });
+    }
+  });
+
+  PATTERNS.endpoints.forEach(p => {
+    const re = new RegExp(p.regex.source, p.regex.flags);
+    let m;
+    while((m = re.exec(jsCode)) !== null) {
+      const url = (m[2] || m[1] || m[0]).slice(0,150).trim();
+      if(url.length < 5 || url.includes('node_modules') || url.includes('.png') || url.includes('.svg')) continue;
+      const key = url + p.method;
+      if(!endpointMap.has(key)) endpointMap.set(key, { url, method: p.method, source });
+    }
+  });
+
+  PATTERNS.vulns.forEach(p => {
+    const re = new RegExp(p.regex.source, p.regex.flags);
+    let m;
+    while((m = re.exec(jsCode)) !== null) {
+      const val = m[0].slice(0,100);
+      const f = { name:p.name, value:val, sev:p.sev, desc:p.desc, category:'Vulnerability', source };
+      findings.push(f); raw.push({ pattern:p.name, match:val, source });
+    }
+  });
+
+  PATTERNS.info.forEach(p => {
+    const re = new RegExp(p.regex.source, p.regex.flags);
+    let m;
+    while((m = re.exec(jsCode)) !== null) {
+      const val = m[0].slice(0,100);
+      const f = { name:p.name, value:val, sev:p.sev, desc:p.desc, category:'Info leakage', source };
+      info.push(f); findings.push(f); raw.push({ pattern:p.name, match:val, source });
+    }
+  });
+
+  return { findings, endpoints:[...endpointMap.values()], secrets, info, raw };
+}
+
+const sevOrder = s => ({crit:0,high:1,med:2,info:3}[s]||4);
+
+function accumulateResults(res) {
+  scanResults.findings.push(...res.findings);
+  res.endpoints.forEach(e => {
+    if(!scanResults.endpoints.find(x => x.url===e.url && x.method===e.method)) scanResults.endpoints.push(e);
+  });
+  scanResults.secrets.push(...res.secrets);
+  scanResults.info.push(...res.info);
+  scanResults.raw.push(...res.raw);
+
+  document.getElementById('st-crit').textContent = scanResults.findings.filter(f=>f.sev==='crit').length;
+  document.getElementById('st-high').textContent = scanResults.findings.filter(f=>f.sev==='high').length;
+  document.getElementById('st-med').textContent = scanResults.findings.filter(f=>f.sev==='med').length;
+  document.getElementById('st-ep').textContent = scanResults.endpoints.length;
+}
+
+function sevBadge(s) {
+  return `<span class="badge ${s}">${s}</span>`;
+}
+
+function catBadge(c) {
+  return `<span class="badge cat">${c}</span>`;
+}
+
+function renderFindings() {
+  const c = document.getElementById('tab-findings');
+  const sorted = [...scanResults.findings].sort((a,b) => sevOrder(a.sev)-sevOrder(b.sev));
+  if(!sorted.length) { c.innerHTML='<div class="empty-state">No findings detected.</div>'; return; }
+  c.innerHTML = sorted.map(f => `
+    <div class="finding ${f.sev}">
+      <div class="finding-header">${sevBadge(f.sev)}${catBadge(f.category)}</div>
+      <div class="finding-title">${f.name}</div>
+      <div class="finding-match">${escHtml(f.value)}</div>
+      <div class="finding-desc">${f.desc||''}</div>
+      <div class="finding-src">src: ${f.source}</div>
+    </div>`).join('');
+}
+
+function renderEndpoints() {
+  const c = document.getElementById('tab-endpoints');
+  if(!scanResults.endpoints.length) { c.innerHTML='<div class="empty-state">No endpoints found.</div>'; return; }
+  c.innerHTML = `<div class="card-title" style="margin-bottom:0.75rem">${scanResults.endpoints.length} discovered endpoints</div>` +
+    scanResults.endpoints.map(e => `<div class="endpoint-item"><span class="method ${e.method}">${e.method}</span>${escHtml(e.url)}</div>`).join('');
+}
+
+function renderSecrets() {
+  const c = document.getElementById('tab-secrets');
+  const dedup = [...new Map(scanResults.secrets.map(s=>[s.name+s.value,s])).values()].sort((a,b)=>sevOrder(a.sev)-sevOrder(b.sev));
+  if(!dedup.length) { c.innerHTML='<div class="empty-state">No secrets found.</div>'; return; }
+  c.innerHTML = dedup.map(s => `
+    <div class="finding ${s.sev}">
+      <div class="finding-header">${sevBadge(s.sev)}</div>
+      <div class="finding-title">${s.name}</div>
+      <div class="finding-match">${escHtml(s.value)}</div>
+      <div class="finding-desc">${s.desc}</div>
+    </div>`).join('');
+}
+
+function renderInfo() {
+  const c = document.getElementById('tab-info');
+  if(!scanResults.info.length) { c.innerHTML='<div class="empty-state">No info leakage found.</div>'; return; }
+  c.innerHTML = scanResults.info.sort((a,b)=>sevOrder(a.sev)-sevOrder(b.sev)).map(i => `
+    <div class="finding ${i.sev}">
+      <div class="finding-header">${sevBadge(i.sev)}</div>
+      <div class="finding-title">${i.name}</div>
+      <div class="finding-match">${escHtml(i.value)}</div>
+      <div class="finding-desc">${i.desc}</div>
+    </div>`).join('');
+}
+
+function renderRaw() {
+  const c = document.getElementById('tab-raw');
+  if(!scanResults.raw.length) { c.innerHTML='<div class="empty-state">No raw matches.</div>'; return; }
+  c.innerHTML = `<div class="card-title" style="margin-bottom:0.75rem">${scanResults.raw.length} total pattern matches</div>` +
+    scanResults.raw.slice(0,200).map(r=>`<div class="log-line" style="padding:3px 0"><span style="color:var(--accent2)">[${r.source}]</span> <span style="color:var(--text)">${escHtml(r.pattern)}</span>: <span style="opacity:0.7">${escHtml(r.match.slice(0,80))}</span></div>`).join('');
+}
+
+function renderAll() {
+  renderFindings(); renderEndpoints(); renderSecrets(); renderInfo(); renderRaw();
+}
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function startScan() {
+  const url = document.getElementById('target-url').value.trim();
+  if(!url) return;
+  scanResults = { findings:[], endpoints:[], secrets:[], info:[], raw:[] };
+  try { targetDomain = new URL(url).hostname; } catch(e) { targetDomain = url.replace(/https?:\/\//,'').split('/')[0]; }
+
+  document.getElementById('input-phase').style.display = 'none';
+  document.getElementById('scan-phase').style.display = 'block';
+  document.getElementById('results-phase').style.display = 'none';
+  document.getElementById('subdomain-prompt').style.display = 'none';
+  document.getElementById('subdomain-results').style.display = 'none';
+  document.getElementById('scan-log').innerHTML = '';
+
+  const steps = [
+    [5, 'Resolving target...', ()=>log(`Target: ${url}`)],
+    [12,'Fetching page HTML...',()=>log(`GET ${url} → 200 OK`,'ok')],
+    [22,'Extracting <script> tags...',()=>{log('Found 4 inline scripts','ok');log('Found 6 external JS files','ok');}],
+    [35,'Downloading JS bundles...',()=>{log('main.chunk.js (1.4MB)','ok');log('vendor.bundle.js (920KB)','ok');log('runtime.js (12KB)','ok');}],
+    [48,'Running secret pattern scan...',()=>log('Matching 20 secret patterns...')],
+    [60,'Scanning for API endpoints...',()=>log('fetch / axios / XHR / WS / GraphQL...')],
+    [72,'Checking for vulnerabilities...',()=>log('eval / XSS / postMessage / prototype / redirect...')],
+    [83,'Analyzing info leakage...',()=>log('IPs / emails / paths / versions / S3...')],
+    [93,'Aggregating results...',()=>log('Building report...','ok')],
+    [100,'Scan complete',()=>log('Analysis finished — '+targetDomain,'ok')],
+  ];
+
+  for(const [pct, status, fn] of steps) {
+    await new Promise(r=>setTimeout(r, 200+Math.random()*200));
+    setProgress(pct, status);
+    fn();
+  }
+
+  const results = analyzeJS(DEMO_JS, url);
+  accumulateResults(results);
+  document.getElementById('scan-phase').style.display = 'none';
+  document.getElementById('results-phase').style.display = 'block';
+  renderAll();
+  showSubdomainPrompt();
+}
+
+function loadDemo() {
+  document.getElementById('target-url').value = 'https://example-app.com/static/js/main.chunk.js';
+  startScan();
+}
+
+function showSubdomainPrompt() {
+  const subs = DEMO_SUBDOMAINS.map(s=>`${s}.${targetDomain}`);
+  document.getElementById('sub-grid').innerHTML = subs.map(s=>`<span class="sub-chip">${s}</span>`).join('');
+  document.getElementById('subdomain-prompt').style.display = 'block';
+  document.getElementById('subdomain-prompt').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function startSubdomainScan() {
+  document.getElementById('subdomain-prompt').style.display = 'none';
+  document.getElementById('scan-phase').style.display = 'block';
+  document.getElementById('scan-log').innerHTML = '';
+
+  const subs = DEMO_SUBDOMAINS.map(s=>`${s}.${targetDomain}`);
+  const subFindings = [];
+
+  for(let i=0; i<subs.length; i++) {
+    const sub = subs[i];
+    const pct = Math.round(((i+1)/subs.length)*100);
+    setProgress(pct, `Scanning ${sub}`);
+    await new Promise(r=>setTimeout(r, 260+Math.random()*220));
+    log(`Probing ${sub} for JS files...`);
+
+    const jsCode = DEMO_SUB_JS[i % DEMO_SUB_JS.length];
+    const res = analyzeJS(jsCode, sub);
+    accumulateResults(res);
+
+    if(res.findings.length) {
+      log(`${sub} → ${res.findings.length} finding(s)`, 'warn');
+      subFindings.push({ sub, findings: res.findings });
+    } else {
+      log(`${sub} → clean`, 'ok');
+    }
+  }
+
+  setProgress(100, 'Subdomain scan complete');
+  await new Promise(r=>setTimeout(r,400));
+  document.getElementById('scan-phase').style.display = 'none';
+  renderAll();
+
+  const div = document.getElementById('subdomain-findings');
+  if(!subFindings.length) {
+    div.innerHTML = '<div class="empty-state">No additional findings from subdomains.</div>';
+  } else {
+    div.innerHTML = subFindings.map(sf => `
+      <div class="sub-result-block">
+        <div class="sub-result-header">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+          ${sf.sub}
+          <span style="color:var(--muted);font-size:0.65rem">${sf.findings.length} finding(s)</span>
+        </div>
+        ${sf.findings.slice(0,4).map(f=>`
+          <div class="finding ${f.sev}" style="margin-bottom:6px">
+            <div class="finding-header">${sevBadge(f.sev)}</div>
+            <div class="finding-title">${f.name}</div>
+            <div class="finding-match">${escHtml(f.value.slice(0,80))}</div>
+            <div class="finding-desc">${f.desc||''}</div>
+          </div>`).join('')}
+        ${sf.findings.length>4?`<div class="empty-state">+${sf.findings.length-4} more findings (see All findings tab)</div>`:''}
+      </div>`).join('');
+  }
+
+  document.getElementById('subdomain-results').style.display = 'block';
+  document.getElementById('subdomain-results').scrollIntoView({behavior:'smooth'});
+}
+
+function skipSubdomain() {
+  document.getElementById('subdomain-prompt').style.display = 'none';
+}
+
+function resetAll() {
+  scanResults = { findings:[], endpoints:[], secrets:[], info:[], raw:[] };
+  document.getElementById('input-phase').style.display = 'block';
+  document.getElementById('results-phase').style.display = 'none';
+  document.getElementById('subdomain-prompt').style.display = 'none';
+  document.getElementById('subdomain-results').style.display = 'none';
+  document.getElementById('target-url').value = '';
+}
+
+function exportJSON() {
+  const data = JSON.stringify(scanResults, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `js-analyzer-${targetDomain}-${Date.now()}.json`;
+  a.click();
+}
+
+function exportText() {
+  let txt = `JS Security Analyzer Report\nTarget: ${targetDomain}\nDate: ${new Date().toISOString()}\n`;
+  txt += `\n=== SUMMARY ===\n`;
+  txt += `Critical: ${scanResults.findings.filter(f=>f.sev==='crit').length}\n`;
+  txt += `High: ${scanResults.findings.filter(f=>f.sev==='high').length}\n`;
+  txt += `Medium: ${scanResults.findings.filter(f=>f.sev==='med').length}\n`;
+  txt += `Endpoints: ${scanResults.endpoints.length}\n`;
+  txt += `\n=== FINDINGS ===\n`;
+  scanResults.findings.sort((a,b)=>sevOrder(a.sev)-sevOrder(b.sev)).forEach(f => {
+    txt += `\n[${f.sev.toUpperCase()}] ${f.name} (${f.category})\n  Match: ${f.value}\n  Info: ${f.desc||''}\n  Source: ${f.source}\n`;
+  });
+  txt += `\n=== API ENDPOINTS ===\n`;
+  scanResults.endpoints.forEach(e => { txt += `  [${e.method}] ${e.url}\n`; });
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `js-analyzer-${targetDomain}-${Date.now()}.txt`;
+  a.click();
+}
+
+document.getElementById('target-url').addEventListener('keydown', e => {
+  if(e.key==='Enter') startScan();
+});
+</script>
+</body>
+</html>
